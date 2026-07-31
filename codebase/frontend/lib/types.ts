@@ -1,12 +1,3 @@
-export type DentalCondition =
-  | "cavity"
-  | "gingivitis"
-  | "tartar"
-  | "enamel_erosion"
-  | "impacted_tooth"
-  | "discoloration"
-  | "healthy";
-
 export type Urgency = "low" | "medium" | "high";
 
 export interface BoundingBox {
@@ -17,9 +8,12 @@ export interface BoundingBox {
 }
 
 export interface Finding {
-  condition: DentalCondition;
+  // Nhãn thật từ classifier (vd "Caries") — không ràng buộc union type ở
+  // frontend, vì API cũng không ràng buộc enum (xem app/models/schemas.py).
+  condition: string;
   confidence: number;
-  bbox: BoundingBox;
+  // null với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus, Hypodontia).
+  bbox: BoundingBox | null;
 }
 
 export interface DiagnosisResult {
@@ -27,10 +21,16 @@ export interface DiagnosisResult {
   model_version: string;
 }
 
+export interface ConditionAssessment {
+  condition: string;
+  severity: Urgency;
+  note: string;
+}
+
 export interface Advice {
-  summary: string;
-  recommendations: string[];
+  narrative: string;
   urgency: Urgency;
+  per_condition: ConditionAssessment[];
   disclaimer: string;
   model_version: string;
 }
@@ -41,18 +41,36 @@ export interface DiagnoseResponse {
   advice: Advice;
 }
 
-export const CONDITION_LABEL_VI: Record<DentalCondition, string> = {
-  cavity: "Sâu răng",
-  gingivitis: "Viêm nướu",
-  tartar: "Cao răng",
-  enamel_erosion: "Mòn men răng",
-  impacted_tooth: "Răng mọc lệch/ngầm",
-  discoloration: "Đổi màu răng",
-  healthy: "Không phát hiện bất thường",
+// Nhãn hiển thị tiếng Việt — thuần trình bày. Nếu model sau này có thêm lớp
+// mới chưa kịp thêm vào đây, fallback về nguyên văn nhãn tiếng Anh (xem
+// labelForCondition) thay vì hiện sai tên bệnh.
+export const CONDITION_LABEL_VI: Record<string, string> = {
+  Caries: "Sâu răng",
+  Calculus: "Cao răng",
+  Gingivitis: "Viêm nướu",
+  "Tooth Discoloration": "Đổi màu răng",
+  Ulcers: "Loét miệng",
+  Hypodontia: "Thiếu răng",
 };
 
-export const URGENCY_LABEL_VI: Record<Urgency, string> = {
-  low: "Không khẩn cấp",
-  medium: "Nên khám sớm",
-  high: "Cần khám ngay",
+export function labelForCondition(condition: string): string {
+  return CONDITION_LABEL_VI[condition] ?? condition;
+}
+
+export const SEVERITY_LABEL_VI: Record<Urgency, string> = {
+  low: "Thấp",
+  medium: "Trung bình",
+  high: "Cao",
+};
+
+export const SEVERITY_TAG_CLASS: Record<Urgency, string> = {
+  low: "tag-neutral",
+  medium: "tag-outline",
+  high: "tag-accent",
+};
+
+export const OVERVIEW_LABEL_VI: Record<Urgency, string> = {
+  low: "Tốt, có vài lưu ý nhỏ",
+  medium: "Cần lưu ý thêm một chút",
+  high: "Nên đi khám sớm",
 };

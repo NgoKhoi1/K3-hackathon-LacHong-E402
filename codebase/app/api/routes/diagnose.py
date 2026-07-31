@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_llm_service, get_yolo_service
 from app.core.image_utils import decode_and_validate_image
@@ -19,7 +19,15 @@ async def diagnose(
 ) -> DiagnoseResponse:
     image_bytes = decode_and_validate_image(payload.image_base64, payload.image_format)
 
-    diagnosis = await yolo_service.detect(image_bytes)
+    try:
+        diagnosis = await yolo_service.detect(image_bytes)
+    except ValueError as exc:
+        # Ảnh không đạt chất lượng tối thiểu (mờ/quá tối/quá sáng/không thấy
+        # rõ khoang miệng) — lỗi input, không phải lỗi hệ thống, trả 400 để
+        # frontend hiển thị được cho người dùng chụp lại (kịch bản ② trong
+        # taxonomy chỗ khó: input không đủ chắc).
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     advice = await llm_service.generate_advice(diagnosis)
 
     return DiagnoseResponse(

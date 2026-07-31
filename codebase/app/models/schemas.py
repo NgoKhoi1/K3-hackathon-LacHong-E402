@@ -5,16 +5,6 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
-class DentalCondition(str, Enum):
-    CAVITY = "cavity"
-    GINGIVITIS = "gingivitis"
-    TARTAR = "tartar"
-    ENAMEL_EROSION = "enamel_erosion"
-    IMPACTED_TOOTH = "impacted_tooth"
-    DISCOLORATION = "discoloration"
-    HEALTHY = "healthy"
-
-
 class Urgency(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
@@ -31,9 +21,14 @@ class BoundingBox(BaseModel):
 
 
 class Finding(BaseModel):
-    condition: DentalCondition
+    # Nhãn lớp thật (vd "Caries", "Calculus"...) đến từ classifier/detector —
+    # KHÔNG ràng buộc bằng enum ở đây, vì source-of-truth là CLASSIFIER_CLASSES
+    # trong vuong/1_dental_preprocess.py; ràng buộc cứng ở schema dễ lệch khi
+    # model đổi lớp mà quên sửa API. Frontend tự map nhãn -> tiếng Việt để hiển thị.
+    condition: str
     confidence: float = Field(..., ge=0, le=1)
-    bbox: BoundingBox
+    # None với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus, Hypodontia).
+    bbox: BoundingBox | None = None
 
 
 class DiagnosisResult(BaseModel):
@@ -41,10 +36,22 @@ class DiagnosisResult(BaseModel):
     model_version: str
 
 
+class ConditionAssessment(BaseModel):
+    """Đánh giá nguy cơ rule-based cho từng finding (từ TriageEngine), không
+    phải do LLM tự suy diễn — xem vuong/5_chatbot_dental_agent.py."""
+
+    condition: str
+    severity: Urgency
+    note: str
+
+
 class Advice(BaseModel):
-    summary: str
-    recommendations: list[str]
+    # Đoạn văn LLM tổng hợp: nhận định chính + khả năng liên quan + mức độ
+    # nguy cơ + khuyến nghị — KHÔNG tách rời thành list khuyến nghị vì LLM
+    # sinh nó như một khối văn xuôi liền mạch (xem finalize() trong agent gốc).
+    narrative: str
     urgency: Urgency
+    per_condition: list[ConditionAssessment]
     disclaimer: str
     model_version: str
 

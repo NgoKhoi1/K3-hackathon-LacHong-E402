@@ -1,19 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError, diagnose, fileToBase64 } from "@/lib/api";
 import {
-  CONDITION_LABEL_VI,
-  URGENCY_LABEL_VI,
+  OVERVIEW_LABEL_VI,
+  SEVERITY_LABEL_VI,
+  SEVERITY_TAG_CLASS,
+  labelForCondition,
   type DiagnoseResponse,
-  type Urgency,
 } from "@/lib/types";
 
-const URGENCY_STYLE: Record<Urgency, string> = {
-  low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  high: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-};
+type Step = "upload" | "analyzing" | "results";
+
+function LogoIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="1" y="1" width="30" height="30" fill="none" stroke="var(--color-accent)" strokeWidth="2" />
+      <rect x="7" y="9" width="4" height="14" fill="var(--color-accent)" />
+      <rect x="14" y="3" width="4" height="20" fill="var(--color-accent)" />
+      <rect x="21" y="9" width="4" height="14" fill="var(--color-accent)" />
+    </svg>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}
 
 function formatFromMime(mime: string): string {
   const format = mime.split("/")[1]?.toLowerCase();
@@ -21,117 +38,191 @@ function formatFromMime(mime: string): string {
 }
 
 export default function Home() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnoseResponse | null>(null);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0] ?? null;
-    setFile(selected);
-    setResult(null);
+  function pickFile(f: File) {
+    setFile(f);
+    setPreviewUrl(URL.createObjectURL(f));
     setError(null);
-    setPreviewUrl(selected ? URL.createObjectURL(selected) : null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) return;
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) pickFile(f);
+  }
 
-    setLoading(true);
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f) pickFile(f);
+  }
+
+  async function handleAnalyze() {
+    if (!file) return;
+    setStep("analyzing");
     setError(null);
-    setResult(null);
     try {
       const base64 = await fileToBase64(file);
       const response = await diagnose(base64, formatFromMime(file.type));
       setResult(response);
+      setStep("results");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Không gọi được API — kiểm tra backend đã chạy chưa.");
-    } finally {
-      setLoading(false);
+      setStep("upload");
     }
   }
 
+  function reset() {
+    setStep("upload");
+    setFile(null);
+    setPreviewUrl(null);
+    setResult(null);
+    setError(null);
+  }
+
   return (
-    <div className="flex flex-1 justify-center bg-zinc-50 px-4 py-10 dark:bg-black">
-      <main className="w-full max-w-2xl space-y-8">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Chẩn đoán tình trạng răng miệng
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Tải ảnh chụp răng miệng lên để nhận chẩn đoán và lời khuyên từ AI.
-          </p>
-        </header>
+    <div style={{ minHeight: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
+      <nav className="nav">
+        <span className="nav-brand" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+          <LogoIcon />
+          Pocket&nbsp;Dentist
+        </span>
+        <span className="text-muted" style={{ fontSize: 12, marginLeft: "auto" }}>
+          Kiểm tra bằng AI — không phải chẩn đoán y khoa
+        </span>
+      </nav>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <input
-            type="file"
-            accept="image/jpeg,image/png"
-            onChange={handleFileChange}
-            className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-md file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-700 dark:text-zinc-300 dark:file:bg-zinc-100 dark:file:text-zinc-900"
-          />
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "var(--space-8) var(--space-4)" }}>
+        {step === "upload" && (
+          <>
+            <h1 style={{ marginBottom: "var(--space-2)" }}>Cùng xem qua nụ cười của bạn</h1>
+            <p className="text-muted" style={{ maxWidth: "52ch" }}>
+              Chụp hoặc tải lên một tấm ảnh rõ nét, đủ sáng về hàm răng của bạn — chụp thẳng mặt là tốt nhất.
+            </p>
 
-          {previewUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt="Ảnh xem trước" className="max-h-72 rounded-md border border-zinc-200 dark:border-zinc-800" />
-          )}
+            <div className="card elev-sm" style={{ padding: "var(--space-6)", gap: "var(--space-4)", marginTop: "var(--space-6)" }}>
+              <div
+                className="dropzone"
+                style={{ width: "100%", height: 320, overflow: "hidden" }}
+                onClick={() => fileInputRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="Ảnh răng đã chọn" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <span className="text-muted" style={{ fontSize: 14, padding: "var(--space-4)" }}>
+                    Kéo thả ảnh răng của bạn vào đây, hoặc bấm để chọn file
+                  </span>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={handleInputChange}
+                style={{ display: "none" }}
+              />
 
-          <button
-            type="submit"
-            disabled={!file || loading}
-            className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
-            {loading ? "Đang chẩn đoán…" : "Chẩn đoán"}
-          </button>
-        </form>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-primary" disabled={!file} onClick={handleAnalyze}>
+                  Phân tích ảnh của tôi
+                  <ArrowIcon />
+                </button>
+                <span className="text-muted" style={{ fontSize: 12 }}>
+                  Khoảng 10 giây · Định dạng JPG hoặc PNG
+                </span>
+              </div>
+            </div>
 
-        {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            {error}
+            {error && (
+              <div className="tag tag-accent" style={{ display: "block", marginTop: "var(--space-4)", padding: "var(--space-3)", fontSize: 13 }}>
+                {error}
+              </div>
+            )}
+          </>
+        )}
+
+        {step === "analyzing" && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-4)", padding: "var(--space-8) 0", textAlign: "center" }}>
+            <h2 style={{ margin: 0 }}>Đợi một chút nhé…</h2>
+            <p className="text-muted" style={{ maxWidth: "44ch", margin: 0 }}>
+              Chúng tôi đang kiểm tra men răng, viền nướu và độ thẳng hàng trong ảnh của bạn.
+            </p>
+            <div className="pd-loadbar" style={{ width: "100%", maxWidth: 320, marginTop: "var(--space-2)" }}>
+              <span />
+            </div>
           </div>
         )}
 
-        {result && (
-          <section className="space-y-4">
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="mb-3 font-medium text-zinc-900 dark:text-zinc-50">Kết quả phát hiện</h2>
-              {result.diagnosis.findings.length === 0 ? (
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Không phát hiện bất thường.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {result.diagnosis.findings.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-zinc-800 dark:text-zinc-200">{CONDITION_LABEL_VI[f.condition]}</span>
-                      <span className="text-zinc-500 dark:text-zinc-400">{(f.confidence * 100).toFixed(0)}%</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-3 text-xs text-zinc-400">model: {result.diagnosis.model_version}</p>
+        {step === "results" && result && (
+          <>
+            <h1 style={{ marginBottom: "var(--space-2)" }}>Ảnh đẹp đấy — đây là những gì chúng tôi tìm thấy</h1>
+            <p className="text-muted" style={{ maxWidth: "56ch" }}>
+              {result.diagnosis.findings.length === 0
+                ? "Không phát hiện bất thường rõ rệt trong 6 nhóm đã khảo sát."
+                : `Phát hiện ${result.diagnosis.findings.length} điểm cần lưu ý.`}
+            </p>
+            <span className={`tag ${SEVERITY_TAG_CLASS[result.advice.urgency]}`} style={{ marginTop: "var(--space-2)" }}>
+              Tổng quan: {OVERVIEW_LABEL_VI[result.advice.urgency]}
+            </span>
+
+            <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "var(--space-6)", marginTop: "var(--space-6)", alignItems: "start" }}>
+              <figure>
+                <div style={{ width: "100%", height: 220, overflow: "hidden" }}>
+                  {previewUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewUrl} alt="Ảnh răng đã phân tích" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                </div>
+                <figcaption>model: {result.diagnosis.model_version}</figcaption>
+              </figure>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <h4 style={{ margin: 0 }}>Những điều chúng tôi nhận thấy</h4>
+
+                {result.diagnosis.findings.length === 0 ? (
+                  <p className="text-muted" style={{ fontSize: 14, margin: 0 }}>Không phát hiện bất thường trong ảnh.</p>
+                ) : (
+                  result.diagnosis.findings.map((f, i) => {
+                    const assessment = result.advice.per_condition.find((pc) => pc.condition === f.condition);
+                    const severity = assessment?.severity ?? "low";
+                    return (
+                      <div className="card" key={i}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-2)" }}>
+                          <div className="card-title">{labelForCondition(f.condition)}</div>
+                          <span className={`tag ${SEVERITY_TAG_CLASS[severity]}`}>{SEVERITY_LABEL_VI[severity]}</span>
+                        </div>
+                        <p className="card-body">{assessment?.note ?? `Độ tin cậy ${(f.confidence * 100).toFixed(0)}%.`}</p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
-            <div className="rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-medium text-zinc-900 dark:text-zinc-50">Lời khuyên</h2>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${URGENCY_STYLE[result.advice.urgency]}`}>
-                  {URGENCY_LABEL_VI[result.advice.urgency]}
-                </span>
-              </div>
-              <p className="text-sm text-zinc-800 dark:text-zinc-200">{result.advice.summary}</p>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-zinc-700 dark:text-zinc-300">
-                {result.advice.recommendations.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-              <p className="mt-4 border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
-                {result.advice.disclaimer}
-              </p>
-            </div>
-          </section>
+            <hr className="hr" style={{ marginTop: "var(--space-8)" }} />
+            <h4 style={{ marginBottom: "var(--space-3)" }}>Nhận định từ AI</h4>
+            <p style={{ fontSize: 14, whiteSpace: "pre-wrap", margin: "0 0 var(--space-6)" }}>{result.advice.narrative}</p>
+
+            <hr className="hr" />
+            <p className="text-muted" style={{ fontSize: 12, maxWidth: "64ch", margin: "var(--space-3) 0 var(--space-6)" }}>
+              <em>{result.advice.disclaimer}</em>
+            </p>
+
+            <button type="button" className="btn btn-secondary" onClick={reset}>
+              Quét ảnh khác
+            </button>
+          </>
         )}
-      </main>
+      </div>
     </div>
   );
 }

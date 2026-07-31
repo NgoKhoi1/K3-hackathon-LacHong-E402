@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "600", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "Dental Diagnosis Agent",
+  title: "Pocket Dentist",
   description: "Chẩn đoán tình trạng răng miệng từ ảnh và nhận lời khuyên",
 };
 
@@ -23,10 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="vi" className={`${archivo.variable} h-full`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

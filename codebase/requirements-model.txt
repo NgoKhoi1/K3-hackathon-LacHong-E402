@@ -1,0 +1,15 @@
+# Deps cho pipeline nhan dien + LLM that (vuong/). Nang (torch/torchvision),
+# tach khoi requirements.txt de dev luong API bang mock khong can cai.
+#
+# torch/torchvision o day KHONG ghim ban GPU - cai ban CPU mac dinh cua PyPI,
+# chay duoc tren moi may. Neu co GPU NVIDIA va muon train/infer nhanh hon,
+# xem huong dan cai ban CUDA trong vuong/requirements.txt roi dat
+# DENTAL_INFERENCE_DEVICE=cuda trong .env.
+torch
+torchvision
+ultralytics
+opencv-python
+numpy
+PyYAML
+openai
+python-dotenv
