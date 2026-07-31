@@ -62,6 +62,16 @@ như trên). 404 nếu `session_id` không tồn tại (vd sau khi backend resta
 { "text": "câu trả lời của người dùng" }
 ```
 
+Sau khi `status` đã đạt `"done"` (advice đã chốt), gọi tiếp endpoint này với
+tin nhắn bất kỳ sẽ chuyển sang **chat tự do**: agent trả lời thêm câu hỏi xin
+lời khuyên dựa trên kết quả đã có, trả về trong field `reply` (thay vì
+`advice`/`question`, cả hai đều `null` ở các lượt này). Agent được yêu cầu (qua
+system prompt) chỉ trả lời trong phạm vi nha khoa/chăm sóc răng miệng; nếu tin
+nhắn không rõ nghĩa, lạc đề, hoặc có dấu hiệu prompt-injection (yêu cầu đổi vai
+trò/bỏ qua hướng dẫn...), agent từ chối lịch sự và đề nghị người dùng hỏi lại
+rõ ràng hơn thay vì bịa nội dung hoặc đổi mức độ nguy cơ đã tính (xem
+`RealAdvisorService._chat_followup_sync` trong `app/services/llm_service.py`).
+
 ### Luồng 1-lượt (vẫn còn, không bị frontend dùng nữa)
 
 `POST /api/v1/diagnose` — bỏ qua hoàn toàn bước hỏi thêm triệu chứng
@@ -93,11 +103,16 @@ mock. Mỗi lần chạy sẽ tốn vài giây load model (lần đầu) + gọi
 
 ## Frontend (thử luồng chính qua UI)
 
-`frontend/` là Next.js app: upload ảnh (+ mô tả triệu chứng tuỳ chọn) → gọi
-`/api/v1/sessions` → nếu agent hỏi thêm thì hiện khung hỏi-đáp ngay trong màn
-kết quả (agent hỏi, người dùng trả lời, lặp lại) → khi xong hiện "Nhận định
-từ AI". Ảnh phân tích có vẽ khung (bbox) đè lên vùng nghi ngờ, màu theo mức độ
-nguy cơ. Chạy song song với backend:
+`frontend/` là Next.js app, bố cục 2 cột kiểu ứng dụng chat:
+- Cột trái (`panel-photo`): upload ảnh (+ mô tả triệu chứng tuỳ chọn), sau khi
+  phân tích thì pin lại ảnh (có vẽ khung bbox đè lên vùng nghi ngờ, màu theo
+  mức độ nguy cơ) + danh sách finding rút gọn + tổng quan mức nguy cơ.
+- Cột phải (`panel-chat`): toàn bộ hội thoại với agent trong một luồng chat
+  liên tục — tóm tắt kết quả nhận diện, các câu hỏi sàng lọc triệu chứng,
+  nhận định cuối cùng, và sau đó vẫn tiếp tục chat tự do được để xin thêm lời
+  khuyên (xem phần `reply` ở API `/sessions/{id}/messages` bên trên).
+
+Chạy song song với backend:
 
 ```bash
 cd frontend

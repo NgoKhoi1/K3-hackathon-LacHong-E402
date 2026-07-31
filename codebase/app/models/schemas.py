@@ -87,4 +87,10 @@ class SessionTurnResponse(BaseModel):
     diagnosis: DiagnosisResult | None = None
     status: Literal["asking", "done"]
     question: str | None = None
+    # Chỉ có giá trị đúng một lần — ở lượt đầu tiên đạt status="done" (khi
+    # TriageEngine vừa chốt kết quả). Các lượt chat tự do sau đó không gửi lại.
     advice: Advice | None = None
+    # Câu trả lời hội thoại tự do — có giá trị ở các lượt chat SAU KHI advice
+    # đã được chốt (người dùng hỏi thêm để xin lời khuyên, không phải câu hỏi
+    # sàng lọc triệu chứng nữa).
+    reply: str | None = None

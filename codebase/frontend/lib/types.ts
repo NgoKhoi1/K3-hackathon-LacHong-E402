@@ -47,9 +47,12 @@ export interface SessionTurnResponse {
   status: "asking" | "done";
   question: string | null;
   advice: Advice | null;
+  reply: string | null;
 }
 
-export type ChatTurn = { role: "agent" | "user"; text: string };
+// kind "narrative" đánh dấu bubble chứa nhận định cuối cùng (advice.narrative)
+// để render theo bố cục báo cáo có mục, khác với các lượt chat thường.
+export type ChatTurn = { role: "agent" | "user"; text: string; kind?: "narrative" };
 
 // Nhãn hiển thị tiếng Việt — thuần trình bày. Nếu model sau này có thêm lớp
 // mới chưa kịp thêm vào đây, fallback về nguyên văn nhãn tiếng Anh (xem

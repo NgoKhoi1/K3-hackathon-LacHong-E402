@@ -40,7 +40,7 @@ async def send_session_message(
     llm_service: LLMAdvisorService = Depends(get_llm_service),
 ) -> SessionTurnResponse:
     try:
-        question, advice = await llm_service.continue_conversation(session_id, payload.text)
+        question, advice, reply = await llm_service.continue_conversation(session_id, payload.text)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên hoặc phiên đã hết hạn") from exc
 
@@ -49,4 +49,5 @@ async def send_session_message(
         status="asking" if question else "done",
         question=question,
         advice=advice,
+        reply=reply,
     )

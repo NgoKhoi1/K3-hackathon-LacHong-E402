@@ -9,7 +9,7 @@ const archivo = Archivo({
 });
 
 export const metadata: Metadata = {
-  title: "Pocket Dentist",
+  title: "Smart Smile",
   description: "Chẩn đoán tình trạng răng miệng từ ảnh và nhận lời khuyên",
 };
 

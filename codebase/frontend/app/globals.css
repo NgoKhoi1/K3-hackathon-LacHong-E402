@@ -137,3 +137,67 @@ textarea.input { min-height: 80px; resize: vertical; }
   position: absolute; top: 0; left: -40%; height: 100%; width: 40%;
   background: var(--color-accent); animation: pd-load 1.2s ease-in-out infinite;
 }
+
+/* -- Bố cục 2 cột: ảnh (trái) + chat với agent (phải) -- */
+
+.workspace {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 380px 1fr;
+}
+@media (max-width: 860px) {
+  .workspace { grid-template-columns: 1fr; overflow-y: auto; }
+  .panel-photo { border-right: none !important; border-bottom: 2px solid var(--color-divider); }
+}
+
+.panel-photo {
+  display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  border-right: 2px solid var(--color-divider);
+  overflow-y: auto;
+}
+
+.panel-chat { display: flex; flex-direction: column; min-height: 0; }
+
+.chat-header {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 2px solid var(--color-divider);
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 14px;
+}
+
+.chat-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+
+.chat-row { display: flex; align-items: flex-start; gap: var(--space-2); max-width: 88%; }
+.chat-row.user { flex-direction: row-reverse; align-self: flex-end; }
+
+.chat-avatar {
+  flex: none; width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-accent-100); border: 1px solid var(--color-divider);
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 12px;
+}
+.chat-avatar-agent { background: var(--color-accent-100); }
+.chat-avatar-user { background: var(--color-neutral-800); color: var(--color-neutral-100); }
+
+.chat-bubble {
+  background: var(--color-surface); padding: var(--space-3);
+  font-size: 14px; line-height: 1.5;
+}
+.chat-row.user .chat-bubble { background: var(--color-accent-100); }
+.chat-bubble-narrative {
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-neutral-100);
+}
+.chat-row:has(.chat-bubble-narrative) { max-width: 100%; }
+
+.chat-inputbar { padding: var(--space-3) var(--space-4); border-top: 2px solid var(--color-divider); }
+
+@keyframes pd-dot-bounce { 0%, 60%, 100% { opacity: 0.25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+.pd-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent);
+  display: inline-block; animation: pd-dot-bounce 1s ease-in-out infinite;
+}
