@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,8 +28,10 @@ class Finding(BaseModel):
     # model đổi lớp mà quên sửa API. Frontend tự map nhãn -> tiếng Việt để hiển thị.
     condition: str
     confidence: float = Field(..., ge=0, le=1)
-    # None với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus, Hypodontia).
-    bbox: BoundingBox | None = None
+    # Rỗng với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus,
+    # Hypodontia). Có thể nhiều box nếu 1 điều kiện xuất hiện ở nhiều vùng
+    # trong ảnh (vd 2 điểm sâu răng khác nhau).
+    bboxes: list[BoundingBox] = Field(default_factory=list)
 
 
 class DiagnosisResult(BaseModel):
@@ -65,3 +68,23 @@ class DiagnoseResponse(BaseModel):
     request_id: str
     diagnosis: DiagnosisResult
     advice: Advice
+
+
+class StartSessionRequest(BaseModel):
+    image_base64: str = Field(..., description="Ảnh dạng base64, không kèm data URI prefix")
+    image_format: str = Field(default="jpeg", description="jpeg | png")
+    initial_text: str = Field(default="", description="Mô tả triệu chứng ban đầu, có thể để trống")
+
+
+class SessionMessageRequest(BaseModel):
+    text: str
+
+
+class SessionTurnResponse(BaseModel):
+    session_id: str
+    # Chỉ có giá trị ở response của POST /sessions (lần đầu) — các lượt
+    # /sessions/{id}/messages sau đó không chạy lại vision nên không có.
+    diagnosis: DiagnosisResult | None = None
+    status: Literal["asking", "done"]
+    question: str | None = None
+    advice: Advice | None = None

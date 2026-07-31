@@ -1,13 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ApiError, diagnose, fileToBase64 } from "@/lib/api";
+import { ApiError, fileToBase64, sendSessionAnswer, startSession } from "@/lib/api";
 import {
   OVERVIEW_LABEL_VI,
   SEVERITY_LABEL_VI,
+  SEVERITY_STROKE_COLOR,
   SEVERITY_TAG_CLASS,
   labelForCondition,
-  type DiagnoseResponse,
+  type Advice,
+  type ChatTurn,
+  type DiagnosisResult,
+  type Finding,
 } from "@/lib/types";
 
 type Step = "upload" | "analyzing" | "results";
@@ -32,6 +36,34 @@ function ArrowIcon() {
   );
 }
 
+function BboxOverlay({ findings, advice }: { findings: Finding[]; advice: Advice | null }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+    >
+      {findings.flatMap((f, fi) => {
+        const severity = advice?.per_condition.find((pc) => pc.condition === f.condition)?.severity ?? "low";
+        const color = SEVERITY_STROKE_COLOR[severity];
+        return f.bboxes.map((b, bi) => (
+          <rect
+            key={`${fi}-${bi}`}
+            x={b.x_min * 100}
+            y={b.y_min * 100}
+            width={(b.x_max - b.x_min) * 100}
+            height={(b.y_max - b.y_min) * 100}
+            fill="none"
+            stroke={color}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ));
+      })}
+    </svg>
+  );
+}
+
 function formatFromMime(mime: string): string {
   const format = mime.split("/")[1]?.toLowerCase();
   return format === "jpg" ? "jpeg" : (format ?? "jpeg");
@@ -43,8 +75,16 @@ export default function Home() {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [initialText, setInitialText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<DiagnoseResponse | null>(null);
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [advice, setAdvice] = useState<Advice | null>(null);
+  const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
+  const [draft, setDraft] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   function pickFile(f: File) {
     setFile(f);
@@ -69,8 +109,16 @@ export default function Home() {
     setError(null);
     try {
       const base64 = await fileToBase64(file);
-      const response = await diagnose(base64, formatFromMime(file.type));
-      setResult(response);
+      const response = await startSession(base64, formatFromMime(file.type), initialText);
+      setSessionId(response.session_id);
+      setDiagnosis(response.diagnosis);
+      if (response.status === "asking" && response.question) {
+        setChatTurns([{ role: "agent", text: response.question }]);
+        setAdvice(null);
+      } else {
+        setChatTurns([]);
+        setAdvice(response.advice);
+      }
       setStep("results");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Không gọi được API — kiểm tra backend đã chạy chưa.");
@@ -82,8 +130,35 @@ export default function Home() {
     setStep("upload");
     setFile(null);
     setPreviewUrl(null);
-    setResult(null);
+    setInitialText("");
     setError(null);
+    setSessionId(null);
+    setDiagnosis(null);
+    setAdvice(null);
+    setChatTurns([]);
+    setDraft("");
+    setChatError(null);
+  }
+
+  async function sendAnswer() {
+    const text = draft.trim();
+    if (!text || !sessionId) return;
+    setChatTurns((t) => [...t, { role: "user", text }]);
+    setDraft("");
+    setIsSending(true);
+    setChatError(null);
+    try {
+      const response = await sendSessionAnswer(sessionId, text);
+      if (response.status === "asking" && response.question) {
+        setChatTurns((t) => [...t, { role: "agent", text: response.question! }]);
+      } else {
+        setAdvice(response.advice);
+      }
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : "Không gửi được câu trả lời — thử lại nhé.");
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -131,6 +206,19 @@ export default function Home() {
                 style={{ display: "none" }}
               />
 
+              <div className="field">
+                <label htmlFor="initial-text" style={{ display: "block", fontSize: 12, marginBottom: 5, color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}>
+                  Mô tả triệu chứng (không bắt buộc)
+                </label>
+                <textarea
+                  id="initial-text"
+                  className="input"
+                  placeholder="Ví dụ: ê buốt khi uống nước lạnh, chảy máu nướu khi đánh răng..."
+                  value={initialText}
+                  onChange={(e) => setInitialText(e.target.value)}
+                />
+              </div>
+
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", flexWrap: "wrap" }}>
                 <button type="button" className="btn btn-primary" disabled={!file} onClick={handleAnalyze}>
                   Phân tích ảnh của tôi
@@ -162,45 +250,59 @@ export default function Home() {
           </div>
         )}
 
-        {step === "results" && result && (
+        {step === "results" && diagnosis && (
           <>
             <h1 style={{ marginBottom: "var(--space-2)" }}>Ảnh đẹp đấy — đây là những gì chúng tôi tìm thấy</h1>
             <p className="text-muted" style={{ maxWidth: "56ch" }}>
-              {result.diagnosis.findings.length === 0
+              {diagnosis.findings.length === 0
                 ? "Không phát hiện bất thường rõ rệt trong 6 nhóm đã khảo sát."
-                : `Phát hiện ${result.diagnosis.findings.length} điểm cần lưu ý.`}
+                : `Phát hiện ${diagnosis.findings.length} điểm cần lưu ý.`}
             </p>
-            <span className={`tag ${SEVERITY_TAG_CLASS[result.advice.urgency]}`} style={{ marginTop: "var(--space-2)" }}>
-              Tổng quan: {OVERVIEW_LABEL_VI[result.advice.urgency]}
-            </span>
+            {advice ? (
+              <span className={`tag ${SEVERITY_TAG_CLASS[advice.urgency]}`} style={{ marginTop: "var(--space-2)" }}>
+                Tổng quan: {OVERVIEW_LABEL_VI[advice.urgency]}
+              </span>
+            ) : (
+              <span className="tag tag-outline" style={{ marginTop: "var(--space-2)" }}>
+                Đang hỏi thêm để đánh giá chính xác hơn…
+              </span>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "var(--space-6)", marginTop: "var(--space-6)", alignItems: "start" }}>
               <figure>
-                <div style={{ width: "100%", height: 220, overflow: "hidden" }}>
+                <div style={{ position: "relative", width: "100%" }}>
                   {previewUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewUrl} alt="Ảnh răng đã phân tích" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <img src={previewUrl} alt="Ảnh răng đã phân tích" style={{ width: "100%", height: "auto", display: "block" }} />
+                  )}
+                  {diagnosis.findings.some((f) => f.bboxes.length > 0) && (
+                    <BboxOverlay findings={diagnosis.findings} advice={advice} />
                   )}
                 </div>
-                <figcaption>model: {result.diagnosis.model_version}</figcaption>
+                <figcaption>model: {diagnosis.model_version}</figcaption>
               </figure>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
                 <h4 style={{ margin: 0 }}>Những điều chúng tôi nhận thấy</h4>
 
-                {result.diagnosis.findings.length === 0 ? (
+                {diagnosis.findings.length === 0 ? (
                   <p className="text-muted" style={{ fontSize: 14, margin: 0 }}>Không phát hiện bất thường trong ảnh.</p>
                 ) : (
-                  result.diagnosis.findings.map((f, i) => {
-                    const assessment = result.advice.per_condition.find((pc) => pc.condition === f.condition);
-                    const severity = assessment?.severity ?? "low";
+                  diagnosis.findings.map((f, i) => {
+                    const assessment = advice?.per_condition.find((pc) => pc.condition === f.condition);
                     return (
                       <div className="card" key={i}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-2)" }}>
                           <div className="card-title">{labelForCondition(f.condition)}</div>
-                          <span className={`tag ${SEVERITY_TAG_CLASS[severity]}`}>{SEVERITY_LABEL_VI[severity]}</span>
+                          {assessment && (
+                            <span className={`tag ${SEVERITY_TAG_CLASS[assessment.severity]}`}>
+                              {SEVERITY_LABEL_VI[assessment.severity]}
+                            </span>
+                          )}
                         </div>
-                        <p className="card-body">{assessment?.note ?? `Độ tin cậy ${(f.confidence * 100).toFixed(0)}%.`}</p>
+                        <p className="card-body">
+                          {assessment?.note ?? `Độ tin cậy ${(f.confidence * 100).toFixed(0)}% — đang chờ đánh giá thêm.`}
+                        </p>
                       </div>
                     );
                   })
@@ -209,17 +311,64 @@ export default function Home() {
             </div>
 
             <hr className="hr" style={{ marginTop: "var(--space-8)" }} />
-            <h4 style={{ marginBottom: "var(--space-3)" }}>Nhận định từ AI</h4>
-            <p style={{ fontSize: 14, whiteSpace: "pre-wrap", margin: "0 0 var(--space-6)" }}>{result.advice.narrative}</p>
+            <h4 style={{ marginBottom: "var(--space-3)" }}>Hỏi thêm để đánh giá chính xác hơn</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+              {chatTurns.map((t, i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span className="card-kicker">{t.role === "agent" ? "Pocket Dentist" : "Bạn"}</span>
+                  <p style={{ margin: 0, fontSize: 14 }}>{t.text}</p>
+                </div>
+              ))}
+              {isSending && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                  <span className="card-kicker">Pocket Dentist</span>
+                  <div className="pd-loadbar" style={{ width: 120 }}>
+                    <span />
+                  </div>
+                </div>
+              )}
+            </div>
 
-            <hr className="hr" />
-            <p className="text-muted" style={{ fontSize: 12, maxWidth: "64ch", margin: "var(--space-3) 0 var(--space-6)" }}>
-              <em>{result.advice.disclaimer}</em>
-            </p>
+            {!advice && (
+              <>
+                <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-4)" }}>
+                  <input
+                    className="input"
+                    style={{ flex: 1 }}
+                    placeholder="Nhập câu trả lời của bạn..."
+                    value={draft}
+                    disabled={isSending}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendAnswer()}
+                  />
+                  <button type="button" className="btn btn-primary" disabled={isSending || !draft.trim()} onClick={sendAnswer}>
+                    Gửi
+                  </button>
+                </div>
+                {chatError && (
+                  <div className="tag tag-accent" style={{ display: "block", marginTop: "var(--space-3)", padding: "var(--space-3)", fontSize: 13 }}>
+                    {chatError}
+                  </div>
+                )}
+              </>
+            )}
 
-            <button type="button" className="btn btn-secondary" onClick={reset}>
-              Quét ảnh khác
-            </button>
+            {advice && (
+              <>
+                <hr className="hr" style={{ marginTop: "var(--space-8)" }} />
+                <h4 style={{ marginBottom: "var(--space-3)" }}>Nhận định từ AI</h4>
+                <p style={{ fontSize: 14, whiteSpace: "pre-wrap", margin: "0 0 var(--space-6)" }}>{advice.narrative}</p>
+
+                <hr className="hr" />
+                <p className="text-muted" style={{ fontSize: 12, maxWidth: "64ch", margin: "var(--space-3) 0 var(--space-6)" }}>
+                  <em>{advice.disclaimer}</em>
+                </p>
+
+                <button type="button" className="btn btn-secondary" onClick={reset}>
+                  Quét ảnh khác
+                </button>
+              </>
+            )}
           </>
         )}
       </div>

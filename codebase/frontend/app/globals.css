@@ -90,6 +90,7 @@ figcaption {
 }
 .input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 .input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+textarea.input { min-height: 80px; resize: vertical; }
 
 .card {
   display: flex; flex-direction: column; gap: var(--space-2);

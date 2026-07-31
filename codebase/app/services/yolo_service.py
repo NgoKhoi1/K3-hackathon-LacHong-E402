@@ -74,7 +74,7 @@ class RealVisionService(YoloDiagnosisService):
             Finding(
                 condition=c.label,
                 confidence=round(c.confidence, 4),
-                bbox=self._normalize_bbox(c.bboxes[0], width, height) if c.bboxes else None,
+                bboxes=[self._normalize_bbox(b, width, height) for b in c.bboxes],
             )
             for c in vision_findings.flagged()
         ]

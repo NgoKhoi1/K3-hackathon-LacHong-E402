@@ -12,8 +12,8 @@ export interface Finding {
   // frontend, vì API cũng không ràng buộc enum (xem app/models/schemas.py).
   condition: string;
   confidence: number;
-  // null với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus, Hypodontia).
-  bbox: BoundingBox | null;
+  // Rỗng với các lớp chỉ có classifier toàn ảnh, không có bbox (Calculus, Hypodontia).
+  bboxes: BoundingBox[];
 }
 
 export interface DiagnosisResult {
@@ -41,6 +41,16 @@ export interface DiagnoseResponse {
   advice: Advice;
 }
 
+export interface SessionTurnResponse {
+  session_id: string;
+  diagnosis: DiagnosisResult | null;
+  status: "asking" | "done";
+  question: string | null;
+  advice: Advice | null;
+}
+
+export type ChatTurn = { role: "agent" | "user"; text: string };
+
 // Nhãn hiển thị tiếng Việt — thuần trình bày. Nếu model sau này có thêm lớp
 // mới chưa kịp thêm vào đây, fallback về nguyên văn nhãn tiếng Anh (xem
 // labelForCondition) thay vì hiện sai tên bệnh.
@@ -67,6 +77,13 @@ export const SEVERITY_TAG_CLASS: Record<Urgency, string> = {
   low: "tag-neutral",
   medium: "tag-outline",
   high: "tag-accent",
+};
+
+// Màu viền bbox theo mức độ — dùng token màu đã có trong globals.css.
+export const SEVERITY_STROKE_COLOR: Record<Urgency, string> = {
+  low: "var(--color-neutral-800)",
+  medium: "var(--color-accent-2)",
+  high: "var(--color-accent)",
 };
 
 export const OVERVIEW_LABEL_VI: Record<Urgency, string> = {
