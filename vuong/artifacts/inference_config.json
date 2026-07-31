@@ -1,0 +1,6 @@
+{
+  "detector_weights": "C:\\lab-hackathon\\artifacts\\detector_runs\\weights\\best.pt",
+  "detector_conf_threshold": 0.35,
+  "classifier_conf_threshold": 0.5,
+  "classifier_checkpoint": "C:\\lab-hackathon\\artifacts\\classifier_best.pt"
+}
