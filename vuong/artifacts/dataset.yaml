@@ -1,0 +1,9 @@
+path: C:\lab-hackathon\dataset\yolo_bbox
+train: C:\lab-hackathon\artifacts\train_images_oversampled.txt
+val: C:\lab-hackathon\dataset\yolo_bbox\images\val
+nc: 4
+names:
+- Caries
+- Ulcers
+- Tooth Discoloration
+- Gingivitis
